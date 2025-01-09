@@ -227,7 +227,7 @@ class SEOAnalyzer:
                 h1, h2 { margin-bottom: 10px; }
                 table { width: 100%; border-collapse: collapse; margin: 20px 0; }
                 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f4f4f4; }
+                th { background-color: #f4f4f4; text-align: center; }
                 ul { margin-top: 20px; }
             </style>
         </head>
