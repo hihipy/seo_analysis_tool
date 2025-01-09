@@ -6,11 +6,12 @@ Generates a polished, user-friendly PDF report using pdfkit and includes detaile
 
 import logging
 import os
-from urllib.parse import urljoin, urlparse
 from typing import Dict
+from urllib.parse import urljoin, urlparse
 import pdfkit
 import markdown2
 
+# Import required libraries for requests and parsing HTML
 try:
     import requests
     from bs4 import BeautifulSoup
@@ -21,7 +22,13 @@ except ImportError as e:
 
 
 class SEOAnalyzer:
-    """SEO analysis tailored for non-technical audiences."""
+    """
+    A class to analyze a webpage's SEO performance based on various metrics.
+
+    Attributes:
+        METRIC_DETAILS (dict): Details about each SEO metric, including definitions,
+                               importance, and evaluation criteria.
+    """
 
     METRIC_DETAILS = {
         "Title": {
@@ -73,21 +80,30 @@ class SEOAnalyzer:
 
     @staticmethod
     def format_url(url: str) -> str:
-        """Format URL to ensure proper structure."""
+        """
+        Format the input URL to ensure proper structure for analysis.
+
+        Args:
+            url (str): The URL to be formatted.
+
+        Returns:
+            str: Properly formatted URL.
+        """
         url = url.strip()
-        
         if not url.startswith(('http://', 'https://')):
-            print(f"URL '{url}' needs 'https://' prefix for proper analysis.")
-            url = f"https://{url.rstrip('/')}/"
-            print(f"Using: {url}")
-        elif not url.endswith('/'):
+            url = f"https://{url}"
+        if not url.endswith('/'):
             url = f"{url}/"
-            print(f"Added trailing slash. Using: {url}")
-            
         return url
 
     def __init__(self, base_url: str, log_level: int = logging.INFO):
-        """Initialize the SEOAnalyzer."""
+        """
+        Initialize the SEOAnalyzer instance.
+
+        Args:
+            base_url (str): The base URL to analyze.
+            log_level (int): The logging level for debugging and informational messages.
+        """
         self.base_url = self.format_url(base_url)  # Format URL immediately
         self.session = self._setup_session()
         self.results = []
@@ -96,18 +112,36 @@ class SEOAnalyzer:
         self._setup_logging(log_level)
 
     def _setup_logging(self, log_level: int) -> None:
-        """Set up logging configuration."""
+        """
+        Set up the logging configuration.
+
+        Args:
+            log_level (int): The logging level (e.g., INFO, DEBUG).
+        """
         logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
 
     def _setup_session(self) -> requests.Session:
-        """Set up requests session."""
+        """
+        Set up a session for HTTP requests.
+
+        Returns:
+            requests.Session: A configured session for making HTTP requests.
+        """
         session = requests.Session()
         session.headers.update({'User-Agent': 'SEO Analyzer'})
         return session
 
     def analyze_page(self, url: str) -> Dict:
-        """Analyze the SEO metrics of a webpage."""
+        """
+        Analyze the SEO metrics of a webpage.
+
+        Args:
+            url (str): The URL to analyze.
+
+        Returns:
+            Dict: A dictionary containing SEO metrics.
+        """
         try:
             self.logger.info(f"Analyzing: {url}")
             response = self.session.get(url, timeout=10)
@@ -128,8 +162,10 @@ class SEOAnalyzer:
             load_time = response.elapsed.total_seconds()
 
             # Generate recommendations
-            self._generate_recommendations(title, meta_desc_content, word_count, len(links), 
-                                       missing_alt_tags, h1_tags)
+            self._generate_recommendations(
+                title, meta_desc_content, word_count, len(links),
+                missing_alt_tags, h1_tags
+            )
 
             # Format values for better readability
             load_time_formatted = f"{load_time:.2f} seconds"
@@ -152,42 +188,51 @@ class SEOAnalyzer:
             return {}
 
     def _generate_recommendations(self, title: str, meta_desc: str, word_count: int,
-                               link_count: int, missing_alt_tags: int, h1_count: int) -> None:
-        """Generate recommendations based on analysis."""
-        # Title recommendations
-        if not title or title == "No Title":
-            self.recommendations.append("Add a title tag to your page.")
-        elif len(title) > 60:
-            self.recommendations.append(f"Shorten your title from {len(title)} to under 60 characters.")
+                                  link_count: int, missing_alt_tags: int, h1_count: int) -> None:
+        """
+        Generate actionable SEO recommendations based on analysis metrics.
 
-        # Meta description recommendations
-        if meta_desc == "No Description":
+        Args:
+            title (str): The page's title tag content.
+            meta_desc (str): The meta description content.
+            word_count (int): Total word count on the page.
+            link_count (int): Total number of links on the page.
+            missing_alt_tags (int): Number of images missing alt tags.
+            h1_count (int): Number of H1 tags present on the page.
+        """
+        if not title:
+            self.recommendations.append("Add a descriptive title tag.")
+        elif len(title) > 60:
+            self.recommendations.append(f"Shorten your title to under 60 characters (current: {len(title)}).")
+
+        if not meta_desc:
             self.recommendations.append("Add a meta description to improve click-through rates.")
         elif len(meta_desc) > 160:
             self.recommendations.append("Shorten your meta description to under 160 characters.")
-        elif len(meta_desc) < 50:
-            self.recommendations.append("Expand your meta description to at least 50 characters.")
 
-        # Content recommendations
         if word_count < 300:
-            self.recommendations.append(f"Increase content length from {word_count} to at least 300 words.")
+            self.recommendations.append(f"Increase content to at least 300 words (current: {word_count}).")
 
-        # Link recommendations
         if link_count < 50:
-            self.recommendations.append(f"Add more internal/external links. Current: {link_count}, recommended: 50+")
-
-        # Image recommendations
+            self.recommendations.append(f"Add more internal/external links. Current: {link_count}.")
         if missing_alt_tags > 0:
             self.recommendations.append(f"Add alt tags to {missing_alt_tags} images.")
 
-        # H1 recommendations
         if h1_count == 0:
-            self.recommendations.append("Add an H1 tag to clearly indicate your page's main topic.")
+            self.recommendations.append("Add at least one H1 tag.")
         elif h1_count > 1:
-            self.recommendations.append(f"Consolidate your {h1_count} H1 tags into a single H1 tag.")
+            self.recommendations.append(f"Reduce H1 tags to one (current: {h1_count}).")
 
     def generate_html_report(self, analysis_results: Dict) -> str:
-        """Generate an HTML report for the analysis."""
+        """
+        Generate an HTML report for the analysis.
+
+        Args:
+            analysis_results (Dict): The SEO analysis results.
+
+        Returns:
+            str: The HTML content of the report.
+        """
         html = """
         <html>
         <head>
@@ -197,28 +242,21 @@ class SEOAnalyzer:
                 h2 { color: #666; margin-top: 20px; }
                 .metric { margin-bottom: 30px; }
                 .recommendations { margin-top: 40px; }
-                .alert { color: #d32f2f; }
-                .success { color: #388e3c; }
             </style>
         </head>
         <body>
         """
-        
         html += f"<h1>SEO Analysis Report</h1>"
         html += f"<p><strong>Analyzing URL:</strong> {self.base_url}</p>"
 
-        if not analysis_results:
-            html += '<p class="alert">Error: Unable to analyze the URL. Please verify the URL is accessible.</p>'
-            return html
-
         for metric, value in analysis_results.items():
-            details = self.METRIC_DETAILS[metric]  # We know the metric exists in our dictionary
+            details = self.METRIC_DETAILS.get(metric, {})
             html += f'<div class="metric">'
             html += f"<h2>{metric}</h2>"
-            html += f"<p><strong>What it is:</strong> {details['definition']}</p>"
-            html += f"<p><strong>Why it's important:</strong> {details['importance']}</p>"
+            html += f"<p><strong>What it is:</strong> {details.get('definition', 'N/A')}</p>"
+            html += f"<p><strong>Why it's important:</strong> {details.get('importance', 'N/A')}</p>"
             html += f"<p><strong>Evaluation:</strong> {value}</p>"
-            html += f"<p><strong>What is good:</strong> {details['criteria']}</p>"
+            html += f"<p><strong>What is good:</strong> {details.get('criteria', 'N/A')}</p>"
             html += "</div>"
 
         if self.recommendations:
@@ -234,7 +272,13 @@ class SEOAnalyzer:
         return html
 
     def generate_pdf_from_html(self, html_content: str, filename: str) -> None:
-        """Convert HTML to PDF using pdfkit."""
+        """
+        Convert the HTML report to a PDF file using pdfkit.
+
+        Args:
+            html_content (str): The HTML content to convert.
+            filename (str): The path to save the PDF file.
+        """
         try:
             options = {
                 'page-size': 'Letter',
@@ -252,8 +296,14 @@ class SEOAnalyzer:
             raise
 
     def run_analysis(self) -> None:
-        """Run the analysis and generate reports."""
+        """
+        Run the full SEO analysis process, generate reports, and save results to a PDF file.
+        """
         analysis_results = self.analyze_page(self.base_url)
+        if not analysis_results:
+            self.logger.error("Failed to analyze the webpage. No results available.")
+            return
+
         html_report = self.generate_html_report(analysis_results)
         downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
         pdf_path = os.path.join(downloads_folder, "seo_analysis_report.pdf")
@@ -261,19 +311,12 @@ class SEOAnalyzer:
 
 
 def main():
-    """Entry point of the script."""
-    while True:
-        try:
-            url = input("Enter the URL to analyze: ").strip()
-            analyzer = SEOAnalyzer(base_url=url)
-            analyzer.run_analysis()
-            break
-        except requests.exceptions.RequestException as e:
-            print(f"\nError accessing URL: {e}")
-            print("Please try again with a valid URL.")
-        except Exception as e:
-            print(f"\nAn error occurred: {e}")
-            print("Please try again with a different URL.")
+    """
+    Entry point of the script. Handles user input and starts the analysis process.
+    """
+    url = input("Enter the URL to analyze: ").strip()
+    analyzer = SEOAnalyzer(base_url=url)
+    analyzer.run_analysis()
 
 
 if __name__ == "__main__":
