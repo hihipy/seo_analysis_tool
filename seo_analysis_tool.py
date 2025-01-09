@@ -1,151 +1,125 @@
 #!/usr/bin/env python3
 """
-Enhanced SEO Analysis Tool.
-Generates a polished, user-friendly PDF report using pdfkit and includes detailed logging.
+Enhanced SEO Analysis Tool
+--------------------------
+This script performs a detailed SEO analysis of a given webpage,
+providing recommendations and generating a PDF report.
 """
 
 import logging
 import os
 from typing import Dict
 from urllib.parse import urljoin, urlparse
-import pdfkit
-import markdown2
 
-# Import required libraries for requests and parsing HTML
+# Import required third-party libraries
 try:
     import requests
     from bs4 import BeautifulSoup
+    import pdfkit
 except ImportError as e:
-    logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.error(f"Missing library: {e}. Please install the required libraries.")
+    logging.basicConfig(level=logging.ERROR)
+    logging.error(f"Missing required library: {e}")
+    logging.error("Please install dependencies using: pip install requests beautifulsoup4 pdfkit")
     raise
 
 
 class SEOAnalyzer:
     """
-    A class to analyze a webpage's SEO performance based on various metrics.
+    SEO Analyzer Class
+    ------------------
+    Analyzes SEO metrics and generates recommendations for optimization.
 
     Attributes:
-        METRIC_DETAILS (dict): Details about each SEO metric, including definitions,
-                               importance, and evaluation criteria.
+        base_url (str): The URL of the webpage to analyze.
+        METRIC_DETAILS (dict): Descriptions and best practices for SEO metrics.
     """
 
     METRIC_DETAILS = {
         "Title": {
-            "definition": "The title tag is the main clickable link shown in search results. It summarizes the page content.",
+            "definition": "The title tag is the main clickable link shown in search results.",
             "importance": "A concise title improves click-through rates and ensures visibility on search engines.",
             "criteria": "Good: Under 60 characters. Bad: Over 60 characters or missing entirely."
         },
         "Meta Description": {
-            "definition": "A meta description is a short summary of the page that appears in search results under the title.",
+            "definition": "A meta description is a short summary of the page that appears in search results.",
             "importance": "It helps users decide whether to click and improves search engine visibility.",
             "criteria": "Good: 50-160 characters. Bad: Missing or over 160 characters."
         },
         "Word Count": {
-            "definition": "Word count measures the amount of text content on a page.",
-            "importance": "Search engines favor detailed content (300+ words) as it signals value to users.",
-            "criteria": "Good: 300+ words. Bad: Fewer than 300 words."
+            "definition": "The total amount of textual content on your webpage.",
+            "importance": "Search engines favor detailed content with sufficient word count as it signals comprehensive value.",
+            "criteria": "Good: 600+ words for main pages. Bad: Less than 300 words."
         },
         "Total Links": {
-            "definition": "Links refer to clickable text or images that connect to other pages, either internally or externally.",
-            "importance": "Links improve navigation and boost SEO by distributing link equity.",
-            "criteria": "Good: 50+ links. Bad: Fewer than 50 links."
+            "definition": "The total number of internal and external links present on your webpage.",
+            "importance": "Links help distribute page authority and guide user navigation.",
+            "criteria": "Good: 50-150 links for main pages. Bad: Less than 20 or more than 500 links."
         },
         "Alt Tags Missing": {
-            "definition": "Alt tags describe images, improving accessibility and helping search engines understand the content.",
-            "importance": "They are essential for visually impaired users and improve image search rankings.",
-            "criteria": "Good: No missing alt tags. Bad: Missing alt tags for some or all images."
+            "definition": "Alt tags are descriptive text alternatives for images on your webpage.",
+            "importance": "Essential for accessibility and SEO image optimization.",
+            "criteria": "Good: All images have descriptive alt tags. Bad: Any images missing alt tags."
         },
         "H1 Tags": {
-            "definition": "The H1 tag is the main heading of a page and describes its primary topic.",
-            "importance": "It helps users and search engines quickly understand the page's focus.",
-            "criteria": "Good: At least one H1 tag. Bad: No H1 tags."
+            "definition": "H1 tags are primary headings that define the main topic of a webpage section.",
+            "importance": "They provide structure for users and search engines to understand content hierarchy.",
+            "criteria": "Good: One unique H1 tag. Bad: No H1 tag or multiple H1 tags."
         },
         "Mobile-Friendly": {
-            "definition": "A mobile-friendly site is optimized for viewing on phones and tablets.",
-            "importance": "Most users browse on mobile devices, and search engines prioritize mobile-friendly websites.",
-            "criteria": "Good: Viewport meta tag present. Bad: Viewport meta tag missing."
+            "definition": "Indicates whether your website is optimized for mobile devices.",
+            "importance": "Mobile optimization is crucial as most web traffic comes from mobile devices.",
+            "criteria": "Good: Responsive design with viewport meta tag. Bad: No mobile optimization."
         },
         "Canonical Tag": {
-            "definition": "Canonical tags prevent duplicate content by indicating the preferred URL for search engines.",
-            "importance": "They ensure proper indexing and avoid ranking penalties for duplicate content.",
-            "criteria": "Good: Canonical tag present. Bad: Canonical tag missing."
+            "definition": "A tag that tells search engines which version of a URL is the master copy.",
+            "importance": "Prevents duplicate content issues and helps consolidate page authority.",
+            "criteria": "Good: Properly implemented canonical URL. Bad: Missing canonical tag."
         },
         "Load Time": {
-            "definition": "Load time measures how quickly a page fully loads in a browser.",
+            "definition": "The time it takes for your webpage to fully load in a browser.",
             "importance": "Fast load times improve user experience and boost search engine rankings.",
             "criteria": "Good: Under 2 seconds. Bad: Over 2 seconds."
         }
     }
 
-    @staticmethod
-    def format_url(url: str) -> str:
-        """
-        Format the input URL to ensure proper structure for analysis.
-
-        Args:
-            url (str): The URL to be formatted.
-
-        Returns:
-            str: Properly formatted URL.
-        """
-        url = url.strip()
-        if not url.startswith(('http://', 'https://')):
-            url = f"https://{url}"
-        if not url.endswith('/'):
-            url = f"{url}/"
-        return url
-
     def __init__(self, base_url: str, log_level: int = logging.INFO):
-        """
-        Initialize the SEOAnalyzer instance.
-
-        Args:
-            base_url (str): The base URL to analyze.
-            log_level (int): The logging level for debugging and informational messages.
-        """
-        self.base_url = self.format_url(base_url)  # Format URL immediately
+        self.base_url = self._format_url(base_url)
         self.session = self._setup_session()
         self.results = []
         self.errors = []
         self.recommendations = []
         self._setup_logging(log_level)
 
-    def _setup_logging(self, log_level: int) -> None:
-        """
-        Set up the logging configuration.
+    @staticmethod
+    def _format_url(url: str) -> str:
+        """Ensure the input URL has a proper scheme (http/https)."""
+        url = url.strip()
+        if not url.startswith(('http://', 'https://')):
+            url = f"https://{url}"
+        return url
 
-        Args:
-            log_level (int): The logging level (e.g., INFO, DEBUG).
-        """
-        logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    def _setup_logging(self, log_level: int) -> None:
+        """Configure logging with the specified log level."""
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
         self.logger = logging.getLogger(__name__)
 
     def _setup_session(self) -> requests.Session:
-        """
-        Set up a session for HTTP requests.
-
-        Returns:
-            requests.Session: A configured session for making HTTP requests.
-        """
+        """Set up an HTTP session with a custom user-agent."""
         session = requests.Session()
-        session.headers.update({'User-Agent': 'SEO Analyzer'})
+        session.headers.update({'User-Agent': 'SEO Analyzer Bot'})
         return session
 
     def analyze_page(self, url: str) -> Dict:
-        """
-        Analyze the SEO metrics of a webpage.
-
-        Args:
-            url (str): The URL to analyze.
-
-        Returns:
-            Dict: A dictionary containing SEO metrics.
-        """
+        """Analyze SEO metrics for a given webpage."""
         try:
-            self.logger.info(f"Analyzing: {url}")
+            self.logger.info(f"Analyzing URL: {url}")
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
+
+            # Parse the HTML content of the page
             soup = BeautifulSoup(response.text, 'html.parser')
 
             # Extract SEO metrics
@@ -161,162 +135,167 @@ class SEOAnalyzer:
             canonical_tag = soup.find('link', rel='canonical')
             load_time = response.elapsed.total_seconds()
 
-            # Generate recommendations
+            # Add character counts for title and meta description
+            title_length = len(title) if title != "No Title" else 0
+            meta_desc_length = len(meta_desc_content) if meta_desc_content != "No Description" else 0
+
+            # Generate recommendations based on the extracted metrics
             self._generate_recommendations(
-                title, meta_desc_content, word_count, len(links),
-                missing_alt_tags, h1_tags
+                title, title_length, meta_desc_content, meta_desc_length, word_count, len(links),
+                missing_alt_tags, h1_tags, canonical_tag
             )
 
-            # Format values for better readability
-            load_time_formatted = f"{load_time:.2f} seconds"
-            mobile_friendly_status = "Yes" if viewport_tag else "No"
-
+            # Return the analysis results as a dictionary
             return {
-                "Title": title,
-                "Meta Description": meta_desc_content,
+                "Title": f"{title} ({title_length} characters)",
+                "Meta Description": f"{meta_desc_content} ({meta_desc_length} characters)",
                 "Word Count": f"{word_count:,} words",
                 "Total Links": f"{len(links):,} links",
                 "Alt Tags Missing": f"{missing_alt_tags:,} images without alt tags",
                 "H1 Tags": f"{h1_tags:,} H1 tags",
-                "Mobile-Friendly": mobile_friendly_status,
+                "Mobile-Friendly": "Yes" if viewport_tag else "No",
                 "Canonical Tag": canonical_tag['href'] if canonical_tag else "None",
-                "Load Time": load_time_formatted
+                "Load Time": f"{load_time:.2f} seconds"
             }
         except Exception as e:
             self.logger.error(f"Error analyzing {url}: {e}")
             self.errors.append({"url": url, "error": str(e)})
             return {}
 
-    def _generate_recommendations(self, title: str, meta_desc: str, word_count: int,
-                                  link_count: int, missing_alt_tags: int, h1_count: int) -> None:
+    def _generate_recommendations(self, title: str, title_length: int, meta_desc: str, meta_desc_length: int,
+                                  word_count: int, link_count: int, missing_alt_tags: int, h1_count: int,
+                                  canonical_tag) -> None:
         """
-        Generate actionable SEO recommendations based on analysis metrics.
-
-        Args:
-            title (str): The page's title tag content.
-            meta_desc (str): The meta description content.
-            word_count (int): Total word count on the page.
-            link_count (int): Total number of links on the page.
-            missing_alt_tags (int): Number of images missing alt tags.
-            h1_count (int): Number of H1 tags present on the page.
+        Generates actionable recommendations for each analyzed metric, 
+        including character counts for title and meta description.
         """
-        if not title:
-            self.recommendations.append("Add a descriptive title tag.")
-        elif len(title) > 60:
-            self.recommendations.append(f"Shorten your title to under 60 characters (current: {len(title)}).")
+        # Title recommendations
+        if not title or title_length > 60:
+            self.recommendations.append(f"Title is too long ({title_length} characters). Keep it under 60.")
+        elif title_length < 50:
+            self.recommendations.append(f"Title is too short ({title_length} characters). Aim for 50-60 characters.")
+        else:
+            self.recommendations.append(f"Title is well-optimized ({title_length} characters).")
 
-        if not meta_desc:
-            self.recommendations.append("Add a meta description to improve click-through rates.")
-        elif len(meta_desc) > 160:
-            self.recommendations.append("Shorten your meta description to under 160 characters.")
+        # Meta description recommendations
+        if not meta_desc or meta_desc_length > 160:
+            self.recommendations.append(f"Meta description is too long ({meta_desc_length} characters). Shorten to 50-160.")
+        elif meta_desc_length < 50:
+            self.recommendations.append(f"Meta description is too short ({meta_desc_length} characters). Lengthen to 50-160.")
+        else:
+            self.recommendations.append(f"Meta description is optimal ({meta_desc_length} characters).")
 
+        # Word count recommendations
         if word_count < 300:
-            self.recommendations.append(f"Increase content to at least 300 words (current: {word_count}).")
+            self.recommendations.append(f"Content is too short ({word_count} words). Aim for 300+ words.")
+        else:
+            self.recommendations.append(f"Content length is adequate ({word_count} words).")
 
-        if link_count < 50:
-            self.recommendations.append(f"Add more internal/external links. Current: {link_count}.")
+        # Link recommendations
+        if link_count < 20 or link_count > 500:
+            self.recommendations.append(f"Link count should be between 50-150 (current: {link_count}).")
+        else:
+            self.recommendations.append("Link count is appropriate.")
+
+        # Alt tag recommendations
         if missing_alt_tags > 0:
             self.recommendations.append(f"Add alt tags to {missing_alt_tags} images.")
+        else:
+            self.recommendations.append("All images have alt tags.")
 
-        if h1_count == 0:
-            self.recommendations.append("Add at least one H1 tag.")
-        elif h1_count > 1:
-            self.recommendations.append(f"Reduce H1 tags to one (current: {h1_count}).")
+        # H1 tag recommendations
+        if h1_count != 1:
+            self.recommendations.append("Ensure exactly one H1 tag is used.")
+        else:
+            self.recommendations.append("H1 tag usage is correct.")
+
+        # Canonical tag recommendations
+        if not canonical_tag:
+            self.recommendations.append("Add a canonical tag to avoid duplicate content issues.")
+        else:
+            self.recommendations.append("Canonical tag is implemented.")
 
     def generate_html_report(self, analysis_results: Dict) -> str:
         """
-        Generate an HTML report for the analysis.
-
-        Args:
-            analysis_results (Dict): The SEO analysis results.
-
-        Returns:
-            str: The HTML content of the report.
+        Generates an HTML report with analysis results and recommendations.
         """
         html = """
         <html>
         <head>
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                h1 { color: #333; }
-                h2 { color: #666; margin-top: 20px; }
-                .metric { margin-bottom: 30px; }
-                .recommendations { margin-top: 40px; }
+                body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
+                h1, h2 { margin-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f4f4f4; }
+                ul { margin-top: 20px; }
             </style>
         </head>
         <body>
         """
         html += f"<h1>SEO Analysis Report</h1>"
-        html += f"<p><strong>Analyzing URL:</strong> {self.base_url}</p>"
+        html += f"<p><strong>URL Analyzed:</strong> {self.base_url}</p>"
 
+        # Add metrics in a table
+        html += "<h2>Analysis Results</h2>"
+        html += "<table>"
+        html += "<tr><th>Metric</th><th>Value</th><th>Best Practice</th></tr>"
         for metric, value in analysis_results.items():
             details = self.METRIC_DETAILS.get(metric, {})
-            html += f'<div class="metric">'
-            html += f"<h2>{metric}</h2>"
-            html += f"<p><strong>What it is:</strong> {details.get('definition', 'N/A')}</p>"
-            html += f"<p><strong>Why it's important:</strong> {details.get('importance', 'N/A')}</p>"
-            html += f"<p><strong>Evaluation:</strong> {value}</p>"
-            html += f"<p><strong>What is good:</strong> {details.get('criteria', 'N/A')}</p>"
-            html += "</div>"
+            html += f"<tr><td>{metric}</td><td>{value}</td><td>{details.get('criteria', 'N/A')}</td></tr>"
+        html += "</table>"
 
+        # Add recommendations
         if self.recommendations:
-            html += '<div class="recommendations">'
-            html += "<h2>Recommendations</h2>"
-            html += "<ul>"
-            for rec in self.recommendations:
-                html += f"<li>{rec}</li>"
+            html += "<h2>Recommendations</h2><ul>"
+            for recommendation in self.recommendations:
+                html += f"<li>{recommendation}</li>"
             html += "</ul>"
-            html += "</div>"
 
         html += "</body></html>"
         return html
 
     def generate_pdf_from_html(self, html_content: str, filename: str) -> None:
         """
-        Convert the HTML report to a PDF file using pdfkit.
-
-        Args:
-            html_content (str): The HTML content to convert.
-            filename (str): The path to save the PDF file.
+        Converts the HTML report to a PDF file.
         """
         try:
             options = {
                 'page-size': 'Letter',
-                'margin-top': '0.75in',
-                'margin-right': '0.75in',
-                'margin-bottom': '0.75in',
-                'margin-left': '0.75in',
-                'encoding': "UTF-8",
-                'no-outline': None
+                'margin-top': '0.5in',
+                'margin-right': '0.5in',
+                'margin-bottom': '0.5in',
+                'margin-left': '0.5in',
+                'encoding': "UTF-8"
             }
             pdfkit.from_string(html_content, filename, options=options)
-            self.logger.info(f"PDF successfully saved to: {filename}")
+            self.logger.info(f"PDF report saved to: {filename}")
         except Exception as e:
             self.logger.error(f"Error generating PDF: {e}")
             raise
 
     def run_analysis(self) -> None:
         """
-        Run the full SEO analysis process, generate reports, and save results to a PDF file.
+        Executes the full SEO analysis and generates a PDF report.
         """
-        analysis_results = self.analyze_page(self.base_url)
-        if not analysis_results:
-            self.logger.error("Failed to analyze the webpage. No results available.")
+        results = self.analyze_page(self.base_url)
+        if not results:
+            self.logger.error("Analysis failed.")
             return
 
-        html_report = self.generate_html_report(analysis_results)
-        downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
-        pdf_path = os.path.join(downloads_folder, "seo_analysis_report.pdf")
-        self.generate_pdf_from_html(html_report, pdf_path)
+        html_report = self.generate_html_report(results)
+        output_path = os.path.join(os.path.expanduser("~"), "Downloads", "seo_analysis_report.pdf")
+        self.generate_pdf_from_html(html_report, output_path)
 
 
 def main():
     """
-    Entry point of the script. Handles user input and starts the analysis process.
+    Entry point of the script. Prompts the user for a URL and starts the analysis.
     """
     url = input("Enter the URL to analyze: ").strip()
     analyzer = SEOAnalyzer(base_url=url)
     analyzer.run_analysis()
+    print("Analysis completed. Check your Downloads folder for the report.")
 
 
 if __name__ == "__main__":
