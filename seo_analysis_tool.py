@@ -15,7 +15,6 @@ try:
     import requests
     from bs4 import BeautifulSoup
 except ImportError as e:
-    # Set up logging for missing dependencies
     logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.error(f"Missing library: {e}. Please install the required libraries.")
     raise
@@ -25,7 +24,6 @@ class SEOAnalyzer:
     """SEO analysis tailored for non-technical audiences."""
 
     METRIC_DETAILS = {
-        # Definitions and importance of various SEO metrics
         "Title": {
             "definition": "The title tag is the main clickable link shown in search results. It summarizes the page content.",
             "importance": "A concise title improves click-through rates and ensures visibility on search engines.",
@@ -73,9 +71,24 @@ class SEOAnalyzer:
         }
     }
 
+    @staticmethod
+    def format_url(url: str) -> str:
+        """Format URL to ensure proper structure."""
+        url = url.strip()
+        
+        if not url.startswith(('http://', 'https://')):
+            print(f"URL '{url}' needs 'https://' prefix for proper analysis.")
+            url = f"https://{url.rstrip('/')}/"
+            print(f"Using: {url}")
+        elif not url.endswith('/'):
+            url = f"{url}/"
+            print(f"Added trailing slash. Using: {url}")
+            
+        return url
+
     def __init__(self, base_url: str, log_level: int = logging.INFO):
         """Initialize the SEOAnalyzer."""
-        self.base_url = base_url
+        self.base_url = self.format_url(base_url)  # Format URL immediately
         self.session = self._setup_session()
         self.results = []
         self.errors = []
@@ -83,12 +96,12 @@ class SEOAnalyzer:
         self._setup_logging(log_level)
 
     def _setup_logging(self, log_level: int) -> None:
-        """Set up logging."""
+        """Set up logging configuration."""
         logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
 
     def _setup_session(self) -> requests.Session:
-        """Set up a requests session."""
+        """Set up requests session."""
         session = requests.Session()
         session.headers.update({'User-Agent': 'SEO Analyzer'})
         return session
@@ -114,19 +127,13 @@ class SEOAnalyzer:
             canonical_tag = soup.find('link', rel='canonical')
             load_time = response.elapsed.total_seconds()
 
-            # Generate recommendations based on analysis
-            if len(title) > 60 or not title:
-                self.recommendations.append("Ensure the title is concise and under 60 characters.")
-            if meta_desc_content == "No Description" or len(meta_desc_content) > 160:
-                self.recommendations.append("Write a meta description between 50-160 characters.")
-            if word_count < 300:
-                self.recommendations.append("Increase word count to at least 300 words.")
-            if missing_alt_tags > 0:
-                self.recommendations.append(f"Add alt tags to {missing_alt_tags} images.")
+            # Generate recommendations
+            self._generate_recommendations(title, meta_desc_content, word_count, len(links), 
+                                       missing_alt_tags, h1_tags)
 
             # Format values for better readability
             load_time_formatted = f"{load_time:.2f} seconds"
-            mobile_friendly_status = "Yes" if bool(viewport_tag) else "No"
+            mobile_friendly_status = "Yes" if viewport_tag else "No"
 
             return {
                 "Title": title,
@@ -144,6 +151,41 @@ class SEOAnalyzer:
             self.errors.append({"url": url, "error": str(e)})
             return {}
 
+    def _generate_recommendations(self, title: str, meta_desc: str, word_count: int,
+                               link_count: int, missing_alt_tags: int, h1_count: int) -> None:
+        """Generate recommendations based on analysis."""
+        # Title recommendations
+        if not title or title == "No Title":
+            self.recommendations.append("Add a title tag to your page.")
+        elif len(title) > 60:
+            self.recommendations.append(f"Shorten your title from {len(title)} to under 60 characters.")
+
+        # Meta description recommendations
+        if meta_desc == "No Description":
+            self.recommendations.append("Add a meta description to improve click-through rates.")
+        elif len(meta_desc) > 160:
+            self.recommendations.append("Shorten your meta description to under 160 characters.")
+        elif len(meta_desc) < 50:
+            self.recommendations.append("Expand your meta description to at least 50 characters.")
+
+        # Content recommendations
+        if word_count < 300:
+            self.recommendations.append(f"Increase content length from {word_count} to at least 300 words.")
+
+        # Link recommendations
+        if link_count < 50:
+            self.recommendations.append(f"Add more internal/external links. Current: {link_count}, recommended: 50+")
+
+        # Image recommendations
+        if missing_alt_tags > 0:
+            self.recommendations.append(f"Add alt tags to {missing_alt_tags} images.")
+
+        # H1 recommendations
+        if h1_count == 0:
+            self.recommendations.append("Add an H1 tag to clearly indicate your page's main topic.")
+        elif h1_count > 1:
+            self.recommendations.append(f"Consolidate your {h1_count} H1 tags into a single H1 tag.")
+
     def generate_html_report(self, analysis_results: Dict) -> str:
         """Generate an HTML report for the analysis."""
         html = """
@@ -155,21 +197,28 @@ class SEOAnalyzer:
                 h2 { color: #666; margin-top: 20px; }
                 .metric { margin-bottom: 30px; }
                 .recommendations { margin-top: 40px; }
+                .alert { color: #d32f2f; }
+                .success { color: #388e3c; }
             </style>
         </head>
         <body>
         """
+        
         html += f"<h1>SEO Analysis Report</h1>"
         html += f"<p><strong>Analyzing URL:</strong> {self.base_url}</p>"
 
+        if not analysis_results:
+            html += '<p class="alert">Error: Unable to analyze the URL. Please verify the URL is accessible.</p>'
+            return html
+
         for metric, value in analysis_results.items():
-            details = self.METRIC_DETAILS.get(metric, {})
+            details = self.METRIC_DETAILS[metric]  # We know the metric exists in our dictionary
             html += f'<div class="metric">'
             html += f"<h2>{metric}</h2>"
-            html += f"<p><strong>What it is:</strong> {details.get('definition', 'N/A')}</p>"
-            html += f"<p><strong>Why it's important:</strong> {details.get('importance', 'N/A')}</p>"
+            html += f"<p><strong>What it is:</strong> {details['definition']}</p>"
+            html += f"<p><strong>Why it's important:</strong> {details['importance']}</p>"
             html += f"<p><strong>Evaluation:</strong> {value}</p>"
-            html += f"<p><strong>What is good:</strong> {details.get('criteria', 'N/A')}</p>"
+            html += f"<p><strong>What is good:</strong> {details['criteria']}</p>"
             html += "</div>"
 
         if self.recommendations:
@@ -213,9 +262,18 @@ class SEOAnalyzer:
 
 def main():
     """Entry point of the script."""
-    url = input("Enter the URL to analyze: ").strip()
-    analyzer = SEOAnalyzer(base_url=url)
-    analyzer.run_analysis()
+    while True:
+        try:
+            url = input("Enter the URL to analyze: ").strip()
+            analyzer = SEOAnalyzer(base_url=url)
+            analyzer.run_analysis()
+            break
+        except requests.exceptions.RequestException as e:
+            print(f"\nError accessing URL: {e}")
+            print("Please try again with a valid URL.")
+        except Exception as e:
+            print(f"\nAn error occurred: {e}")
+            print("Please try again with a different URL.")
 
 
 if __name__ == "__main__":
